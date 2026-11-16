@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pagatu-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // nodejs_compat: el SDK oficial de MCP importa módulos de Node (node:crypto,
+  // node:stream) incluso en el transporte Web Standard.
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true
+  },
+  // Variables NO secretas de PRODUCCIÓN. El único secreto es CLERK_SECRET_KEY,
+  // que se carga con `wrangler secret put CLERK_SECRET_KEY` (ver README).
+  //
+  // Los tres valores de identidad —issuer de Clerk, Convex y la clave secreta—
+  // tienen que ser del MISMO entorno. Aquí son los de producción:
+  // clerk.pagatu.io + peaceful-swordfish-460 + sk_live_…
+  // Para desarrollo NO se tocan estos: `wrangler dev` lee `.dev.vars`, que
+  // apunta al instance de Clerk de dev y al deployment peaceful-woodpecker-797.
+  "vars": {
+    "CLERK_JWT_ISSUER_DOMAIN": "https://clerk.pagatu.io",
+    "CONVEX_URL": "https://peaceful-swordfish-460.convex.cloud",
+    "PAGATU_MCP_PUBLIC_URL": "https://mcp.pagatu.io",
+    "PAGATU_APP_URL": "https://app.pagatu.io",
+    "PAGATU_MCP_WRITE_ENABLED": "true",
+    "PAGATU_MCP_LOG_LEVEL": "info"
+  },
+  "routes": [
+    {
+      "pattern": "mcp.pagatu.io",
+      "custom_domain": true
+    }
+  ]
+}
