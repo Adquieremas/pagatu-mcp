@@ -366,3 +366,23 @@ export function paymentSummary(row: Row): Row {
     reference: str(row, 'reference'),
   })
 }
+
+/**
+ * Plantilla de documento: lo justo para elegir una.
+ *
+ * `content` y `contentJson` llevan el cuerpo entero de la plantilla —miles de
+ * caracteres— y no hacen falta para decidir cuál usar: el editor los aplica
+ * en el servidor al crear el documento.
+ */
+export function templateSummary(row: Row): Row {
+  return compact({
+    id: str(row, '_id'),
+    name: str(row, 'name'),
+    description: str(row, 'description'),
+    category: str(row, 'category'),
+    documentType: str(row, 'documentType'),
+    language: str(row, 'language') ?? 'es',
+    // Del sistema o propia: cambia quién la mantiene y si se puede borrar.
+    isSystem: typeof row.isSystem === 'boolean' ? row.isSystem : undefined,
+  })
+}

@@ -18,12 +18,15 @@ import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { defineTool } from './shared'
 import type { ToolContext } from './shared'
-import { asRow, asRows, documentDetail, documentSummary } from './shape'
+import { asRow, asRows, documentDetail, documentSummary, templateSummary } from './shape'
 import { ToolError } from '../errors'
 import { DAY_MS, parseInstant } from './datetime'
 
 /** Tipos de documento de Pagatu (`convex/documentNumbering.ts`). */
 const DOCUMENT_TYPES = ['quote', 'proposal', 'contract', 'collaboration_agreement', 'letter', 'free_document'] as const
+
+/** Idiomas en los que puede nacer un documento profesional. */
+const DOCUMENT_LANGUAGES = ['es', 'en', 'pt'] as const
 
 const itemSchema = z.object({
   name: z.string().trim().min(1).max(300).describe('Concepto de la línea.'),
@@ -159,6 +162,82 @@ export function registerDocumentTools(server: McpServer, context: ToolContext): 
         created: true,
         documentId: quoteId,
         status: 'draft',
+        url: `${ctx.config.appUrl}/documentos/ver/${quoteId}`,
+      }
+    },
+  )
+
+  defineTool(
+    server,
+    context,
+    {
+      name: 'pagatu_list_document_templates',
+      title: 'Listar plantillas de documento',
+      description:
+        'Lista las plantillas disponibles para crear un documento profesional: las del sistema y las tuyas. ' +
+        'Filtra por tipo de documento, categoría e idioma. Devuelve el id que acepta `pagatu_create_document`.',
+      permission: 'read',
+      inputSchema: {
+        documentType: z.enum(DOCUMENT_TYPES).optional().describe('Tipo de documento al que sirve la plantilla.'),
+        category: z.string().trim().min(1).max(60).optional(),
+        language: z.enum(DOCUMENT_LANGUAGES).optional().describe('Idioma de la plantilla: es, en o pt.'),
+      },
+    },
+    async (args, ctx) => {
+      const rows = asRows(
+        await ctx.convex.query('listDocumentTemplates', {
+          ...(args.documentType ? { documentType: args.documentType } : {}),
+          ...(args.category ? { category: args.category } : {}),
+          ...(args.language ? { language: args.language } : {}),
+        }),
+      )
+      return { count: rows.length, templates: rows.map(templateSummary) }
+    },
+  )
+
+  defineTool(
+    server,
+    context,
+    {
+      name: 'pagatu_create_document',
+      title: 'Crear documento profesional (borrador)',
+      description:
+        'Crea un DOCUMENTO PROFESIONAL en borrador: propuesta, contrato, acuerdo de colaboración, carta o documento libre, ' +
+        'además de cotización. Es la vía del editor avanzado —plantillas, variables, idioma y firma digital—, ' +
+        'frente a `pagatu_create_quote`, que es la cotización rápida con ítems. ' +
+        'No emite, no numera y no envía nada: queda en Pagatu para que lo termines en el editor. ' +
+        'El cuerpo lo siembra Pagatu desde la plantilla y tu kit de marca; esta herramienta no escribe el contenido.',
+      permission: 'write',
+      idempotent: false,
+      inputSchema: {
+        title: z.string().trim().min(1).max(300).describe('Título del documento. Obligatorio.'),
+        documentType: z
+          .enum(DOCUMENT_TYPES)
+          .describe('quote, proposal, contract, collaboration_agreement, letter o free_document.'),
+        language: z.enum(DOCUMENT_LANGUAGES).optional().describe('Idioma en el que nace el documento. Por defecto, español.'),
+        templateId: z.string().trim().min(1).max(64).optional().describe('Id de plantilla (ver `pagatu_list_document_templates`).'),
+        clientId: z.string().trim().min(1).max(64).optional().describe('Id de un cliente tuyo; Pagatu congela sus datos.'),
+        clientName: z.string().trim().min(1).max(180).optional().describe('Nombre de la contraparte cuando no tiene ficha.'),
+        currency: z.string().trim().min(3).max(8).optional(),
+        category: z.string().trim().min(1).max(60).optional(),
+        serviceType: z.string().trim().min(1).max(60).optional(),
+        items: z.array(itemSchema).max(100).optional().describe('Ítems iniciales; opcionales en un documento profesional.'),
+        discount: z.number().min(0).max(1_000_000_000).optional().describe('Descuento en importe.'),
+        tax: z.number().min(0).max(1_000_000_000).optional().describe('Impuesto en importe.'),
+      },
+    },
+    async (args, ctx) => {
+      // `documentType` viaja tal cual: es lo que distingue una propuesta de un
+      // contrato y lo que decide la serie con la que se numerará al emitirse.
+      // Ni `status` ni `content`: el estado lo fija Convex en borrador y el
+      // cuerpo lo siembra desde la plantilla y el kit de marca.
+      const quoteId = await ctx.convex.mutation<string>('createProDocument', args)
+      return {
+        created: true,
+        documentId: quoteId,
+        documentType: args.documentType,
+        status: 'draft',
+        editor: `${ctx.config.appUrl}/documentos/documento/${quoteId}`,
         url: `${ctx.config.appUrl}/documentos/ver/${quoteId}`,
       }
     },

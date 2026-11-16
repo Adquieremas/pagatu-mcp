@@ -128,6 +128,8 @@ describe('protocolo MCP', () => {
     expect(names).toContain('pagatu_list_invoices')
     expect(names).toContain('pagatu_get_invoice')
     expect(names).toContain('pagatu_list_payments')
+    expect(names).toContain('pagatu_create_document')
+    expect(names).toContain('pagatu_list_document_templates')
   })
 
   it('en modo solo lectura las herramientas de escritura NI SE ANUNCIAN', async () => {
@@ -141,6 +143,7 @@ describe('protocolo MCP', () => {
     expect(names).toContain('pagatu_list_clients')
     expect(names).not.toContain('pagatu_create_client')
     expect(names).not.toContain('pagatu_create_quote')
+    expect(names).not.toContain('pagatu_create_document')
   })
 })
 
@@ -236,6 +239,69 @@ describe('herramientas contra Convex', () => {
     const mutation = backend.calls.find((item) => item.url.includes('/api/mutation'))
     const args = (mutation?.body as { args?: Array<Record<string, unknown>> } | undefined)?.args?.[0]
     expect(args?.validUntil).toBe(Date.parse('2027-01-31T00:00:00.000Z'))
+  })
+
+  it('crea un documento PROFESIONAL del tipo pedido, siempre en borrador', async () => {
+    const backend = createFakeBackend({ convex: { 'quotes:createProDocument': { value: 'doc_pro' } } })
+    const result = await call(
+      toolPayload('pagatu_create_document', {
+        title: 'Contrato de servicios',
+        documentType: 'contract',
+        language: 'en',
+        clientName: 'Acme LLC',
+      }),
+      backend,
+    )
+    expect(toolText(result)).toMatchObject({
+      created: true,
+      documentId: 'doc_pro',
+      documentType: 'contract',
+      status: 'draft',
+      editor: 'https://app.pagatu.io/documentos/documento/doc_pro',
+    })
+    const mutation = backend.calls.find((item) => item.url.includes('/api/mutation'))
+    const body = mutation?.body as { path?: string; args?: Array<Record<string, unknown>> } | undefined
+    expect(body?.path).toBe('quotes:createProDocument')
+    expect(body?.args?.[0]).toMatchObject({ documentType: 'contract', language: 'en' })
+    // Ni estado ni contenido: el borrador y el cuerpo los decide Pagatu.
+    expect(body?.args?.[0]).not.toHaveProperty('status')
+    expect(body?.args?.[0]).not.toHaveProperty('content')
+  })
+
+  it('rechaza un tipo de documento que Pagatu no tiene', async () => {
+    const backend = createFakeBackend({ convex: { 'quotes:createProDocument': { value: 'x' } } })
+    const result = await call(
+      toolPayload('pagatu_create_document', { title: 'Algo', documentType: 'factura_electronica' }),
+      backend,
+    )
+    expect(result.error ?? result.result?.isError).toBeTruthy()
+    expect(backend.calls.some((item) => item.url.includes('/api/mutation'))).toBe(false)
+  })
+
+  it('las plantillas salen sin el cuerpo de la plantilla', async () => {
+    const backend = createFakeBackend({
+      convex: {
+        'documentTemplates:listTemplates': {
+          value: [
+            {
+              _id: 'tpl_1',
+              name: 'Contrato de servicios',
+              category: 'legal',
+              documentType: 'contract',
+              language: 'es',
+              isSystem: true,
+              contentJson: '{"enorme":"' + 'x'.repeat(3000) + '"}',
+              content: { body: 'x'.repeat(3000) },
+            },
+          ],
+        },
+      },
+    })
+    const result = await call(toolPayload('pagatu_list_document_templates', { documentType: 'contract' }), backend)
+    const payload = toolText(result)
+    expect(payload).toMatchObject({ count: 1 })
+    expect((payload.templates as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'tpl_1', isSystem: true })
+    expect(JSON.stringify(payload).length).toBeLessThan(500)
   })
 
   it('valida los argumentos antes de tocar Convex', async () => {

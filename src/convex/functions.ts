@@ -62,7 +62,17 @@ export const CONVEX_FUNCTIONS = {
   createQuoteWithItems: {
     path: 'quotes:createQuoteWithItems',
     kind: 'mutation',
-    description: 'Crea una cotización con sus ítems (borrador por defecto).',
+    description: 'Crea una cotización rápida con sus ítems (borrador por defecto).',
+  },
+  createProDocument: {
+    path: 'quotes:createProDocument',
+    kind: 'mutation',
+    description: 'Crea un documento PROFESIONAL (propuesta, contrato, acuerdo, carta…) en borrador.',
+  },
+  listDocumentTemplates: {
+    path: 'documentTemplates:listTemplates',
+    kind: 'query',
+    description: 'Plantillas del sistema y propias, filtrables por tipo, categoría e idioma.',
   },
   // ─── Agenda ─────────────────────────────────────────────────────────────
   listAppointments: {

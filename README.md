@@ -85,6 +85,8 @@ src/
 | `pagatu_list_documents` | lectura | `quotes:listQuotesPage` |
 | `pagatu_get_document` | lectura | `quotes:getQuote` |
 | `pagatu_create_quote` | escritura | `quotes:createQuoteWithItems` |
+| `pagatu_list_document_templates` | lectura | `documentTemplates:listTemplates` |
+| `pagatu_create_document` | escritura | `quotes:createProDocument` |
 | `pagatu_list_appointments` | lectura | `agenda:listAppointments` |
 | `pagatu_agenda_overview` | lectura | `agenda:getAgendaOverview` |
 | `pagatu_list_services` | lectura | `agenda:listServices` |
@@ -95,6 +97,12 @@ src/
 
 Notas que importan:
 
+- Dos vías de creación, las mismas que ofrece la app en «Nuevo documento»:
+  `pagatu_create_quote` es la **cotización rápida** (ítems y totales), y
+  `pagatu_create_document` es el **documento profesional** (propuesta,
+  contrato, acuerdo, carta o documento libre, con plantilla e idioma). Ambas
+  dejan el documento en borrador; el cuerpo del profesional lo siembra Pagatu
+  desde la plantilla y el kit de marca.
 - `pagatu_create_quote` crea **siempre un borrador**: no envía `status`, así que
   Convex deja el documento en `draft`, que no consume correlativo ni sale del
   escritorio de su dueño.

@@ -22,6 +22,8 @@ const ESPERADAS = [
   'invoices:listInvoices',
   'invoices:getInvoice',
   'payments:listPayments',
+  'quotes:createProDocument',
+  'documentTemplates:listTemplates',
 ]
 
 describe('lista blanca de funciones Convex', () => {
@@ -36,10 +38,14 @@ describe('lista blanca de funciones Convex', () => {
     }
   })
 
-  it('solo las dos escrituras previstas son mutations', () => {
+  it('solo las tres escrituras previstas son mutations', () => {
     const mutations = Object.values(CONVEX_FUNCTIONS)
       .filter((spec) => spec.kind === 'mutation')
       .map((spec) => spec.path)
-    expect(mutations.sort()).toEqual(['clients:createClient', 'quotes:createQuoteWithItems'])
+    expect(mutations.sort()).toEqual([
+      'clients:createClient',
+      'quotes:createProDocument',
+      'quotes:createQuoteWithItems',
+    ])
   })
 })

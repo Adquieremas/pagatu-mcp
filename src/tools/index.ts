@@ -29,9 +29,10 @@ export const READ_ONLY_TOOLS = [
   'pagatu_list_invoices',
   'pagatu_get_invoice',
   'pagatu_list_payments',
+  'pagatu_list_document_templates',
 ] as const
 
-export const WRITE_TOOLS = ['pagatu_create_client', 'pagatu_create_quote'] as const
+export const WRITE_TOOLS = ['pagatu_create_client', 'pagatu_create_quote', 'pagatu_create_document'] as const
 
 export function registerAllTools(server: McpServer, context: ToolContext): void {
   registerProfileTools(server, context)
