@@ -114,6 +114,10 @@ export function documentSummary(row: Row): Row {
     signedAt: iso(row, 'signedAt') ?? iso(row, 'acceptedAt'),
     issuedAt: iso(row, 'issuedAt'),
     validUntil: iso(row, 'validUntil'),
+    // Los días pactados viajan aparte de la fecha: un documento puede tener
+    // los días guardados sin fecha calculada (Convex solo la deriva en su
+    // rama por defecto), y ocultarlo haría invisible la validez que se pidió.
+    validityDays: num(row, 'validityDays'),
     updatedAt: iso(row, 'updatedAt'),
   })
 }

@@ -47,6 +47,10 @@ describe('proyecciones', () => {
     expect(JSON.stringify(detail)).not.toContain('extraInterno')
   })
 
+  it('muestra los días de validez aunque no haya fecha calculada', () => {
+    expect(documentSummary({ _id: 'q', validityDays: 15 })).toMatchObject({ validityDays: 15 })
+  })
+
   it('el número de una cotización viene de quoteNumber', () => {
     expect(documentSummary({ _id: 'q', quoteNumber: 'COT-9' }).number).toBe('COT-9')
   })

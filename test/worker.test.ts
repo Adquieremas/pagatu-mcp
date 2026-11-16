@@ -198,6 +198,43 @@ describe('herramientas contra Convex', () => {
     expect(args?.validUntil).toBe(Date.parse('2026-12-31T00:00:00.000Z'))
   })
 
+  it('con validityDays suelto calcula la fecha, porque Convex no lo hace', async () => {
+    // Convex solo deriva validUntil cuando no recibe ninguno de los dos
+    // (quotes.ts). Con los días sueltos guardaba los días y dejaba el
+    // documento sin fecha: comprobado contra la cuenta real.
+    const backend = createFakeBackend({ convex: { 'quotes:createQuoteWithItems': { value: 'q_v' } } })
+    const antes = Date.now()
+    await call(
+      toolPayload('pagatu_create_quote', {
+        title: 'Con validez',
+        items: [{ name: 'Servicio', quantity: 1, unitPrice: 100 }],
+        validityDays: 15,
+      }),
+      backend,
+    )
+    const mutation = backend.calls.find((item) => item.url.includes('/api/mutation'))
+    const args = (mutation?.body as { args?: Array<Record<string, unknown>> } | undefined)?.args?.[0]
+    expect(args?.validityDays).toBe(15)
+    expect(args?.validUntil).toBeTypeOf('number')
+    expect(args?.validUntil as number).toBeGreaterThanOrEqual(antes + 15 * 86_400_000 - 5_000)
+  })
+
+  it('una fecha explícita manda sobre los días', async () => {
+    const backend = createFakeBackend({ convex: { 'quotes:createQuoteWithItems': { value: 'q_v' } } })
+    await call(
+      toolPayload('pagatu_create_quote', {
+        title: 'Con fecha',
+        items: [{ name: 'Servicio', quantity: 1, unitPrice: 100 }],
+        validityDays: 15,
+        validUntil: '2027-01-31',
+      }),
+      backend,
+    )
+    const mutation = backend.calls.find((item) => item.url.includes('/api/mutation'))
+    const args = (mutation?.body as { args?: Array<Record<string, unknown>> } | undefined)?.args?.[0]
+    expect(args?.validUntil).toBe(Date.parse('2027-01-31T00:00:00.000Z'))
+  })
+
   it('valida los argumentos antes de tocar Convex', async () => {
     const backend = createFakeBackend({ convex: { 'quotes:createQuoteWithItems': { value: 'q' } } })
     const result = await call(toolPayload('pagatu_create_quote', { title: 'Sin líneas', items: [] }), backend)

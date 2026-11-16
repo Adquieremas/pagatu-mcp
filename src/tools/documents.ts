@@ -20,7 +20,7 @@ import { defineTool } from './shared'
 import type { ToolContext } from './shared'
 import { asRow, asRows, documentDetail, documentSummary } from './shape'
 import { ToolError } from '../errors'
-import { parseInstant } from './datetime'
+import { DAY_MS, parseInstant } from './datetime'
 
 /** Tipos de documento de Pagatu (`convex/documentNumbering.ts`). */
 const DOCUMENT_TYPES = ['quote', 'proposal', 'contract', 'collaboration_agreement', 'letter', 'free_document'] as const
@@ -135,6 +135,23 @@ export function registerDocumentTools(server: McpServer, context: ToolContext): 
       const { validUntil, ...rest } = args
       const payload: Record<string, unknown> = { ...rest }
       if (typeof validUntil === 'string') payload.validUntil = parseInstant(validUntil, 'validUntil')
+
+      // `validityDays` SIN fecha: aquí se calcula la fecha.
+      //
+      // Convex solo deriva `validUntil` en su rama por defecto —cuando no
+      // recibe ni `validUntil` ni `validityDays` y la toma de las preferencias
+      // del perfil (`quotes.ts`: `now + preference.validityDays * 86400000`)—.
+      // Si llegan los días sueltos, los guarda tal cual y el documento se
+      // queda SIN fecha de validez. Comprobado creando una cotización de
+      // prueba con `validityDays: 15`: ni `validUntil` ni vencimiento visible.
+      //
+      // Se completa el argumento con la MISMA fórmula que usa Convex, no con
+      // una regla nueva: es rellenar lo que el editor de la app también manda,
+      // para que «días de validez desde hoy» signifique lo que promete.
+      if (payload.validUntil === undefined && typeof payload.validityDays === 'number') {
+        payload.validUntil = Date.now() + payload.validityDays * DAY_MS
+      }
+
       // `status` NO se envía: Convex deja el documento en `draft`, y es la
       // única forma de garantizar que esta herramienta no emita nada.
       const quoteId = await ctx.convex.mutation<string>('createQuoteWithItems', payload)
