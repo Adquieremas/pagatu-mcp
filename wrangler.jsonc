@@ -7,6 +7,22 @@
   // node:stream) incluso en el transporte Web Standard.
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  // Smart Placement: que el Worker se ejecute cerca de Clerk y Convex, no del
+  // visitante.
+  //
+  // Cada petición MCP encadena hasta tres llamadas salientes —verificar el
+  // token, firmar el JWT de plantilla, consultar Convex— y todas van a
+  // Estados Unidos. Sin esto, desde Lima esos tres saltos cruzan el continente
+  // uno detrás de otro; con esto, lo cruza solo la petición del cliente y las
+  // tres llamadas quedan cortas.
+  //
+  // Estaba activado en el dashboard y los primeros despliegues desde este
+  // archivo lo borraron: la configuración local sobrescribe la remota, así que
+  // lo que no esté declarado aquí se pierde. Por eso vive en el repositorio.
+  // Cloudflare necesita algo de tráfico antes de decidir dónde colocarlo.
+  "placement": {
+    "mode": "smart"
+  },
   "observability": {
     "enabled": true
   },
