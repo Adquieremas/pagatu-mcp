@@ -231,20 +231,28 @@ claude mcp add --transport http pagatu https://mcp.pagatu.io/mcp
 
 ## Conectar Codex
 
-En `~/.codex/config.toml`:
+```bash
+codex mcp add pagatu --url https://mcp.pagatu.io/mcp
+```
+
+Un solo comando: Codex detecta que el servidor pide OAuth, abre el navegador,
+completa el flujo contra Clerk y guarda el token («Detected OAuth support…
+Successfully logged in»). En `~/.codex/config.toml` deja:
 
 ```toml
 [mcp_servers.pagatu]
 url = "https://mcp.pagatu.io/mcp"
 ```
 
-O por CLI:
+Comprobar que quedó bien:
 
 ```bash
-codex mcp add pagatu --url https://mcp.pagatu.io/mcp
+codex mcp list
 ```
 
-Codex abre el mismo flujo OAuth en el navegador la primera vez.
+La fila `pagatu` debe decir `enabled` y `Auth: OAuth`. Si la app de Codex está
+instalada pero `codex` no está en el PATH, el binario vive en
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`.
 
 ## Seguridad
 
