@@ -3,7 +3,7 @@ import { resolveConfig } from '../src/env'
 import { createLogger } from '../src/logging'
 import { ClerkBackendClient, __clearAuthCaches, readJwtExpiry } from '../src/auth/clerk'
 import { PagatuSessionRequiredError, UpstreamError } from '../src/errors'
-import { createFakeBackend, fakeFetch, fakeJwt, testEnv } from './helpers'
+import { createFakeBackend, fakeFetch, fakeJwt, stubFetch, testEnv } from './helpers'
 
 const config = resolveConfig(testEnv())
 const logger = createLogger('error')
@@ -20,6 +20,16 @@ describe('verifyOAuthAccessToken', () => {
     const { clerk } = client()
     const verified = await clerk.verifyOAuthAccessToken('tok_1')
     expect(verified).toEqual({ userId: 'user_123', clientId: 'client_abc', scopes: ['profile', 'email'] })
+  })
+
+  it('funciona sin fetch inyectado, usando el global', async () => {
+    // El `fetch` por defecto se envuelve a propósito: en workerd, llamar al
+    // global guardado en una propiedad («this.fetchImpl(...)») lanza «Illegal
+    // invocation». Node no lo reproduce, así que este test fija la intención
+    // y la comprobación de verdad es la sonda contra el Worker desplegado.
+    stubFetch(createFakeBackend())
+    const clerk = new ClerkBackendClient(config, logger)
+    expect((await clerk.verifyOAuthAccessToken('tok_1'))?.userId).toBe('user_123')
   })
 
   it('acepta `user_id` y `scope` como cadena (variantes de Clerk)', async () => {

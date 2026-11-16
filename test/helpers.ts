@@ -14,7 +14,7 @@ export const TEST_CONVEX_URL = 'https://test-deployment.convex.cloud'
 
 export function testEnv(overrides: Partial<Env> = {}): Env {
   return {
-    CLERK_SECRET_KEY: 'sk_test_fake',
+    CLERK_SECRET_KEY: 'sk_test_0123456789abcdefghijklmnopqrstuvwx',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.pagatu.io',
     CLERK_API_URL: 'https://api.clerk.test',
     CONVEX_URL: TEST_CONVEX_URL,

@@ -46,12 +46,32 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export class ConfigError extends Error {
   readonly missing: string[]
-  constructor(missing: string[]) {
-    super(`Configuración incompleta del Worker: faltan ${missing.join(', ')}`)
+  /** Variables presentes pero con un valor que no puede funcionar. */
+  readonly invalid: string[]
+
+  constructor(missing: string[], invalid: Array<{ name: string; reason: string }> = []) {
+    const partes: string[] = []
+    if (missing.length > 0) partes.push(`faltan ${missing.join(', ')}`)
+    for (const { name, reason } of invalid) partes.push(`${name}: ${reason}`)
+    super(`Configuración del Worker incorrecta — ${partes.join(' · ')}`)
     this.name = 'ConfigError'
     this.missing = missing
+    this.invalid = invalid.map((item) => item.name)
   }
 }
+
+/**
+ * Una clave secreta de Clerk de verdad: `sk_test_`/`sk_live_` y después solo
+ * caracteres de token.
+ *
+ * Esto existe por un fallo real en producción: el dashboard de Clerk muestra la
+ * clave ENMASCARADA (`sk_live_S…weG2`, con un «…» literal), y copiarla de ahí
+ * deja un secreto que Clerk rechaza con 401. El MCP lo traducía en «tu token no
+ * vale» y señalaba al cliente MCP en vez de a la configuración — media hora de
+ * buscar en el sitio equivocado. Ahora el Worker se niega a arrancar la petición
+ * y dice exactamente qué pasa.
+ */
+const CLERK_SECRET_PATTERN = /^sk_(test|live)_[A-Za-z0-9_-]{16,}$/
 
 const LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'warn', 'error']
 
@@ -95,6 +115,18 @@ export function resolveConfig(env: Env): Config {
   const publicUrl = trimmed(env.PAGATU_MCP_PUBLIC_URL)
   if (!publicUrl) missing.push('PAGATU_MCP_PUBLIC_URL')
   if (missing.length > 0) throw new ConfigError(missing)
+
+  const invalid: Array<{ name: string; reason: string }> = []
+  if (!CLERK_SECRET_PATTERN.test(clerkSecretKey as string)) {
+    const enmascarada = /[……*]/.test(clerkSecretKey as string)
+    invalid.push({
+      name: 'CLERK_SECRET_KEY',
+      reason: enmascarada
+        ? 'parece la clave ENMASCARADA del dashboard de Clerk (contiene «…» o «*»). Copia la clave completa con el botón de copiar y vuelve a cargarla con `wrangler secret put CLERK_SECRET_KEY`.'
+        : 'no tiene el formato de una clave secreta de Clerk (sk_test_… o sk_live_…).',
+    })
+  }
+  if (invalid.length > 0) throw new ConfigError([], invalid)
 
   return {
     clerkSecretKey: clerkSecretKey as string,

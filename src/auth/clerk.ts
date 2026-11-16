@@ -112,11 +112,24 @@ export function readJwtExpiry(jwt: string): number | undefined {
   }
 }
 
+/**
+ * `fetch` envuelto en una función propia.
+ *
+ * NO sustituir por `= fetch` a secas. En workerd, guardar el `fetch` global en
+ * una propiedad y llamarlo como método (`this.fetchImpl(...)`) lanza
+ * «Illegal invocation: function called with incorrect `this` reference», y
+ * además solo en producción: en Node —y por tanto en los tests— el mismo
+ * código funciona. Costó un 500 en vivo averiguarlo.
+ *
+ * La envoltura llama al global como global, así que da igual quién sea `this`.
+ */
+const globalFetch: typeof fetch = (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)
+
 export class ClerkBackendClient {
   constructor(
     private readonly config: Config,
     private readonly logger: Logger,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl: typeof fetch = globalFetch,
   ) {}
 
   private async request(path: string, init: RequestInit = {}): Promise<Response> {

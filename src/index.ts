@@ -53,9 +53,17 @@ export default {
       config = resolveConfig(env)
     } catch (error) {
       if (error instanceof ConfigError) {
-        createLogger('error').error('config.incomplete', { missing: error.missing })
+        createLogger('error').error('config.incomplete', {
+          missing: error.missing,
+          invalid: error.invalid,
+        })
         return jsonResponse(
-          { error: 'server_misconfigured', message: error.message, missing: error.missing },
+          {
+            error: 'server_misconfigured',
+            message: error.message,
+            missing: error.missing,
+            invalid: error.invalid,
+          },
           503,
         )
       }
