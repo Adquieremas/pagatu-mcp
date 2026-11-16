@@ -54,6 +54,20 @@ export function asRows(value: unknown): Row[] {
   return Array.isArray(value) ? value.filter((item): item is Row => typeof item === 'object' && item !== null) : []
 }
 
+/**
+ * CÉNTIMOS → unidades de la moneda.
+ *
+ * Las facturas guardan el dinero en céntimos enteros (`totalCents`), mientras
+ * que documentos y cobros lo guardan en unidades. Devolver las dos cosas con
+ * el mismo nombre haría que un total de 354,00 apareciera unas veces como 354
+ * y otras como 35400: la diferencia entre una factura correcta y una cien
+ * veces mayor. Aquí se convierte una sola vez, en la frontera.
+ */
+function fromCents(row: Row, key: string): number | undefined {
+  const value = num(row, key)
+  return value === undefined ? undefined : Math.round(value) / 100
+}
+
 export function clientSummary(row: Row): Row {
   return compact({
     id: str(row, '_id'),
@@ -237,5 +251,118 @@ export function profileSummary(row: Row): Row {
     currency: str(row, 'defaultCurrency') ?? str(row, 'currency'),
     businessName: str(row, 'businessName'),
     onboardingCompleted: typeof row.onboardingCompleted === 'boolean' ? row.onboardingCompleted : undefined,
+  })
+}
+
+
+/**
+ * Factura: lo que hace falta para saber si está cobrada y por cuánto.
+ *
+ * `listInvoices` y `getInvoice` devuelven una VISTA —`{ invoice, lines,
+ * displayStatus, collectedCents, balanceCents, counterparty }`—, no la fila
+ * cruda, así que el estado que vale es `displayStatus` (deriva vencida,
+ * parcial y pagada del ledger y del reloj; la tabla solo persiste draft,
+ * issued y void).
+ *
+ * Fuera quedan `publicToken` (abre la factura a cualquiera que lo tenga),
+ * `issuerSnapshot` y `recipientSnapshot` crudos y las claves de idempotencia.
+ */
+export function invoiceSummary(view: Row): Row {
+  const invoice = asRow(view.invoice) ?? view
+  const counterparty = asRow(view.counterparty)
+  return compact({
+    id: str(invoice, '_id'),
+    number: str(invoice, 'number'),
+    status: str(view, 'displayStatus') ?? str(invoice, 'status'),
+    storedStatus: str(invoice, 'status'),
+    currency: str(invoice, 'currency'),
+    subtotal: fromCents(invoice, 'subtotalCents'),
+    tax: fromCents(invoice, 'taxCents'),
+    taxLabel: str(invoice, 'taxLabel'),
+    total: fromCents(invoice, 'totalCents'),
+    collected: fromCents(view, 'collectedCents'),
+    balance: fromCents(view, 'balanceCents'),
+    clientId: str(invoice, 'clientId'),
+    clientName: counterparty
+      ? str(counterparty, 'name') ?? str(counterparty, 'businessName') ?? str(counterparty, 'razonSocial')
+      : undefined,
+    reference: str(invoice, 'reference'),
+    issuedAt: iso(invoice, 'issuedAt'),
+    dueDate: iso(invoice, 'dueDate'),
+    sentAt: iso(invoice, 'sentAt'),
+    voidedAt: iso(invoice, 'voidedAt'),
+    updatedAt: iso(invoice, 'updatedAt'),
+  })
+}
+
+export function invoiceLine(row: Row): Row {
+  const taxRateBps = num(row, 'taxRateBps')
+  return compact({
+    description: str(row, 'description'),
+    quantity: num(row, 'quantity'),
+    unitPrice: fromCents(row, 'unitPriceCents'),
+    // Puntos básicos → porcentaje: 1800 = 18 %.
+    taxRate: taxRateBps === undefined ? undefined : taxRateBps / 100,
+    subtotal: fromCents(row, 'lineSubtotalCents'),
+    tax: fromCents(row, 'lineTaxCents'),
+    total: fromCents(row, 'lineTotalCents'),
+  })
+}
+
+export function invoiceDetail(view: Row): Row {
+  const invoice = asRow(view.invoice) ?? view
+  const counterparty = asRow(view.counterparty)
+  return compact({
+    ...invoiceSummary(view),
+    notes: str(invoice, 'notes'),
+    sourceDocumentId: str(invoice, 'sourceDocumentId'),
+    revision: num(invoice, 'revision'),
+    voidReason: str(invoice, 'voidReason'),
+    client: counterparty
+      ? compact({
+          name: str(counterparty, 'name') ?? str(counterparty, 'businessName'),
+          taxId: str(counterparty, 'taxId'),
+          taxIdLabel: str(counterparty, 'taxIdLabel'),
+          email: str(counterparty, 'email'),
+          address: str(counterparty, 'address'),
+        })
+      : undefined,
+    lines: asRows(view.lines).map(invoiceLine),
+  })
+}
+
+/**
+ * Cobro: importe, cuánto se recibió y qué falta.
+ *
+ * El estado que cuenta es `effectiveStatus`, derivado de los abonos y del
+ * reloj —«vencido» no se guarda en la tabla, porque un estado que depende de
+ * la hora envejece solo—. Los importes vienen en unidades, no en céntimos.
+ *
+ * Fuera quedan `transactionCode` y el detalle del método: son datos de la
+ * operación bancaria, no hacen falta para responder «qué me han pagado», y el
+ * nombre enmascarado del método (`paymentMethodMasked`) ya identifica cuál es.
+ */
+export function paymentSummary(row: Row): Row {
+  return compact({
+    id: str(row, '_id'),
+    concept: str(row, 'concept'),
+    status: str(row, 'effectiveStatus') ?? str(row, 'status'),
+    currency: str(row, 'currency'),
+    amount: num(row, 'amount'),
+    received: num(row, 'receivedAmount'),
+    balance: num(row, 'balanceAmount'),
+    paymentDate: iso(row, 'paymentDate'),
+    dueDate: iso(row, 'dueDate'),
+    clientId: str(row, 'clientId'),
+    clientName: str(row, 'clientName'),
+    documentId: str(row, 'quoteId'),
+    documentNumber: str(row, 'quoteNumber'),
+    documentTitle: str(row, 'quoteTitle'),
+    invoiceId: str(row, 'invoiceId'),
+    category: str(row, 'categoryName'),
+    method: str(row, 'paymentMethodName'),
+    methodMasked: str(row, 'paymentMethodMasked'),
+    installments: asRows(row.installments).length || undefined,
+    reference: str(row, 'reference'),
   })
 }

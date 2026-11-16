@@ -89,6 +89,9 @@ src/
 | `pagatu_agenda_overview` | lectura | `agenda:getAgendaOverview` |
 | `pagatu_list_services` | lectura | `agenda:listServices` |
 | `pagatu_list_payment_methods` | lectura | `paymentMethods:listMyPaymentMethods` |
+| `pagatu_list_invoices` | lectura | `invoices:listInvoices` |
+| `pagatu_get_invoice` | lectura | `invoices:getInvoice` |
+| `pagatu_list_payments` | lectura | `payments:listPayments` |
 
 Notas que importan:
 
@@ -99,6 +102,14 @@ Notas que importan:
   IBAN, alias de billetera ni la clave del QR).
 - `pagatu_get_document` no devuelve el contenido del editor (`richContent`) ni
   el token público del documento.
+- **Facturas y cobros son solo lectura.** `createInvoiceDraft`, `issueInvoice`
+  y `createPayment` existen en Convex y NO se exponen: emitir consume
+  correlativo y registrar un cobro es un hecho contable.
+- El estado de una factura y de un cobro es el EFECTIVO (vencida, parcial,
+  pagada), que Pagatu deriva del ledger y del reloj; el estado guardado va
+  aparte en `storedStatus`.
+- Las facturas guardan el dinero en céntimos y el MCP lo devuelve en unidades
+  de la moneda. El pendiente se agrupa POR MONEDA, nunca en una suma única.
 - `search` y `limit` de `pagatu_list_clients` filtran lo que Convex ya devolvió
   (`listClients` no acepta filtros); `pagatu_list_documents` sí usa la búsqueda
   y la paginación reales de Convex.

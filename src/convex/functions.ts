@@ -80,6 +80,25 @@ export const CONVEX_FUNCTIONS = {
     kind: 'query',
     description: 'Servicios reservables del perfil.',
   },
+  // ─── Facturas comerciales ───────────────────────────────────────────────
+  // No es facturación electrónica: Pagatu no declara nada ante ninguna
+  // autoridad. Son documentos de cobro con numeración propia.
+  listInvoices: {
+    path: 'invoices:listInvoices',
+    kind: 'query',
+    description: 'Facturas del perfil con su estado efectivo, cobrado y saldo.',
+  },
+  getInvoice: {
+    path: 'invoices:getInvoice',
+    kind: 'query',
+    description: 'Una factura del perfil con sus líneas y la contraparte.',
+  },
+  // ─── Cobros ─────────────────────────────────────────────────────────────
+  listPayments: {
+    path: 'payments:listPayments',
+    kind: 'query',
+    description: 'Hasta 500 cobros del perfil, con cliente, documento y abonos.',
+  },
   // ─── Métodos de cobro ───────────────────────────────────────────────────
   listMyPaymentMethods: {
     path: 'paymentMethods:listMyPaymentMethods',

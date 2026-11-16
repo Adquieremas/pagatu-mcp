@@ -19,6 +19,9 @@ const ESPERADAS = [
   'agenda:getAgendaOverview',
   'agenda:listServices',
   'paymentMethods:listMyPaymentMethods',
+  'invoices:listInvoices',
+  'invoices:getInvoice',
+  'payments:listPayments',
 ]
 
 describe('lista blanca de funciones Convex', () => {

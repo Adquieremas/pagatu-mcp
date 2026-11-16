@@ -13,6 +13,7 @@ import { registerClientTools } from './clients'
 import { registerDocumentTools } from './documents'
 import { registerAgendaTools } from './agenda'
 import { registerPaymentTools } from './payments'
+import { registerInvoiceTools } from './invoices'
 import { registerProfileTools } from './profile'
 
 export const READ_ONLY_TOOLS = [
@@ -25,6 +26,9 @@ export const READ_ONLY_TOOLS = [
   'pagatu_agenda_overview',
   'pagatu_list_services',
   'pagatu_list_payment_methods',
+  'pagatu_list_invoices',
+  'pagatu_get_invoice',
+  'pagatu_list_payments',
 ] as const
 
 export const WRITE_TOOLS = ['pagatu_create_client', 'pagatu_create_quote'] as const
@@ -34,5 +38,6 @@ export function registerAllTools(server: McpServer, context: ToolContext): void 
   registerClientTools(server, context)
   registerDocumentTools(server, context)
   registerAgendaTools(server, context)
+  registerInvoiceTools(server, context)
   registerPaymentTools(server, context)
 }

@@ -125,6 +125,9 @@ describe('protocolo MCP', () => {
     expect(names).toContain('pagatu_list_clients')
     expect(names).toContain('pagatu_create_quote')
     expect(names).toContain('pagatu_list_payment_methods')
+    expect(names).toContain('pagatu_list_invoices')
+    expect(names).toContain('pagatu_get_invoice')
+    expect(names).toContain('pagatu_list_payments')
   })
 
   it('en modo solo lectura las herramientas de escritura NI SE ANUNCIAN', async () => {
@@ -282,6 +285,58 @@ describe('herramientas contra Convex', () => {
     const raw = JSON.stringify(toolText(result))
     expect(raw).toContain('pm_1')
     expect(raw).not.toContain('19100000000000')
+  })
+
+  it('las facturas salen en unidades y con el pendiente por moneda', async () => {
+    const backend = createFakeBackend({
+      convex: {
+        'invoices:listInvoices': {
+          value: [
+            {
+              invoice: { _id: 'inv_1', number: 'F001-1', status: 'issued', currency: 'PEN', totalCents: 35400 },
+              displayStatus: 'partial',
+              collectedCents: 10000,
+              balanceCents: 25400,
+            },
+            {
+              invoice: { _id: 'inv_2', number: 'F001-2', status: 'issued', currency: 'USD', totalCents: 20000 },
+              displayStatus: 'issued',
+              collectedCents: 0,
+              balanceCents: 20000,
+            },
+          ],
+        },
+      },
+    })
+    const result = await call(toolPayload('pagatu_list_invoices'), backend)
+    const payload = toolText(result)
+    expect(payload.count).toBe(2)
+    // Dos monedas, dos pendientes: nunca una suma única.
+    expect(payload.pendingByCurrency).toEqual({ PEN: 254, USD: 200 })
+  })
+
+  it('los cobros se filtran por estado efectivo', async () => {
+    const backend = createFakeBackend({
+      convex: {
+        'payments:listPayments': {
+          value: [
+            { _id: 'p1', concept: 'Anticipo web', currency: 'PEN', amount: 500, balanceAmount: 300, effectiveStatus: 'overdue' },
+            { _id: 'p2', concept: 'Mantenimiento', currency: 'PEN', amount: 200, balanceAmount: 0, effectiveStatus: 'paid' },
+          ],
+        },
+      },
+    })
+    const result = await call(toolPayload('pagatu_list_payments', { status: 'overdue' }), backend)
+    const payload = toolText(result)
+    expect(payload).toMatchObject({ total: 1, pendingByCurrency: { PEN: 300 } })
+    expect((payload.payments as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'p1', status: 'overdue' })
+  })
+
+  it('una factura de otra cuenta responde «no existe»', async () => {
+    const backend = createFakeBackend({ convex: { 'invoices:getInvoice': { value: null } } })
+    const result = await call(toolPayload('pagatu_get_invoice', { invoiceId: 'inv_ajena' }), backend)
+    expect(result.result?.isError).toBe(true)
+    expect(toolText(result)).toMatchObject({ error: { code: 'not_found' } })
   })
 
   it('la agenda sin rango consulta las próximas cuatro semanas', async () => {

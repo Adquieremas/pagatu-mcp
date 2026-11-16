@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { clientSummary, documentDetail, documentSummary, paymentMethodSummary, profileSummary } from '../src/tools/shape'
+import {
+  clientSummary,
+  documentDetail,
+  documentSummary,
+  invoiceDetail,
+  invoiceSummary,
+  paymentMethodSummary,
+  paymentSummary,
+  profileSummary,
+} from '../src/tools/shape'
 
 describe('proyecciones', () => {
   it('un cliente sale con sus datos de contacto y sin ruido interno', () => {
@@ -93,5 +102,86 @@ describe('proyecciones', () => {
     const summary = profileSummary({ _id: 'pr_1', name: 'Dilmer', plan: 'pro' })
     expect(summary).not.toHaveProperty('plan')
     expect(summary).not.toHaveProperty('planLabel')
+  })
+
+  it('una factura convierte los céntimos a unidades de la moneda', () => {
+    const summary = invoiceSummary({
+      invoice: {
+        _id: 'inv_1',
+        number: 'F001-00000012',
+        status: 'issued',
+        currency: 'PEN',
+        subtotalCents: 30000,
+        taxCents: 5400,
+        totalCents: 35400,
+      },
+      displayStatus: 'partial',
+      collectedCents: 10000,
+      balanceCents: 25400,
+    })
+    // 35400 céntimos son 354,00 — no 35 400.
+    expect(summary).toMatchObject({
+      total: 354,
+      subtotal: 300,
+      tax: 54,
+      collected: 100,
+      balance: 254,
+    })
+  })
+
+  it('el estado de una factura es el EFECTIVO, con el guardado aparte', () => {
+    const summary = invoiceSummary({ invoice: { _id: 'i', status: 'issued' }, displayStatus: 'overdue' })
+    expect(summary.status).toBe('overdue')
+    expect(summary.storedStatus).toBe('issued')
+  })
+
+  it('una factura no expone el enlace público ni los snapshots crudos', () => {
+    const detail = invoiceDetail({
+      invoice: {
+        _id: 'inv_1',
+        totalCents: 1000,
+        publicToken: 'tok_factura_secreto',
+        issuerSnapshot: { iban: 'PE0012345678901234567890' },
+        recipientSnapshot: { name: 'Cliente' },
+        issueKey: 'clave-idempotencia',
+      },
+      counterparty: { name: 'Cliente SAC', taxId: '20512345678', taxIdLabel: 'RUC' },
+      lines: [{ description: 'Servicio', quantity: 2, unitPriceCents: 50000, taxRateBps: 1800, lineTotalCents: 118000 }],
+    })
+    const serialized = JSON.stringify(detail)
+    expect(serialized).not.toContain('tok_factura_secreto')
+    expect(serialized).not.toContain('PE0012345678901234567890')
+    expect(serialized).not.toContain('clave-idempotencia')
+    expect(detail.client).toMatchObject({ name: 'Cliente SAC', taxId: '20512345678' })
+  })
+
+  it('una línea de factura traduce los puntos básicos a porcentaje', () => {
+    const detail = invoiceDetail({
+      invoice: { _id: 'i' },
+      lines: [{ description: 'Hora', quantity: 1.5, unitPriceCents: 10000, taxRateBps: 1800, lineTotalCents: 17700 }],
+    })
+    expect((detail.lines as Array<Record<string, unknown>>)[0]).toMatchObject({
+      unitPrice: 100,
+      taxRate: 18,
+      total: 177,
+    })
+  })
+
+  it('un cobro usa el estado efectivo y no expone el código de transacción', () => {
+    const summary = paymentSummary({
+      _id: 'pay_1',
+      concept: 'Anticipo',
+      status: 'pending',
+      effectiveStatus: 'overdue',
+      currency: 'PEN',
+      amount: 500,
+      receivedAmount: 200,
+      balanceAmount: 300,
+      transactionCode: '000987654321',
+      paymentMethodMasked: 'BCP ••••4321',
+      installments: [{ amount: 200 }],
+    })
+    expect(summary).toMatchObject({ status: 'overdue', amount: 500, received: 200, balance: 300, installments: 1 })
+    expect(JSON.stringify(summary)).not.toContain('000987654321')
   })
 })
