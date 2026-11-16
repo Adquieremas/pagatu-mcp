@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clientSummary, documentDetail, documentSummary, paymentMethodSummary } from '../src/tools/shape'
+import { clientSummary, documentDetail, documentSummary, paymentMethodSummary, profileSummary } from '../src/tools/shape'
 
 describe('proyecciones', () => {
   it('un cliente sale con sus datos de contacto y sin ruido interno', () => {
@@ -66,5 +66,28 @@ describe('proyecciones', () => {
     expect(serialized).not.toContain('19100000000000')
     expect(serialized).not.toContain('00219100000000000000')
     expect(serialized).not.toContain('r2/qr')
+  })
+
+  it('el plan sale de effectiveAccess, no del campo `plan` (que Convex no publica)', () => {
+    const summary = profileSummary({
+      _id: 'pr_1',
+      name: 'Dilmer',
+      email: 'hola@example.com',
+      businessName: 'DilmerLoayza19',
+      effectiveAccess: {
+        billingPlan: 'free',
+        accessPlan: 'business',
+        displayName: 'Partner',
+        internalPolicy: 'partner',
+        aiMonthlyAllowance: 100,
+      },
+    })
+    expect(summary).toMatchObject({ plan: 'business', planLabel: 'Partner', billingPlan: 'free' })
+  })
+
+  it('un perfil sin effectiveAccess no inventa un plan', () => {
+    const summary = profileSummary({ _id: 'pr_1', name: 'Dilmer', plan: 'pro' })
+    expect(summary).not.toHaveProperty('plan')
+    expect(summary).not.toHaveProperty('planLabel')
   })
 })

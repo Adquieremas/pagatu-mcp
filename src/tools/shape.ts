@@ -206,12 +206,29 @@ export function paymentMethodSummary(row: Row): Row {
   })
 }
 
+/**
+ * El plan se lee de `effectiveAccess`, NUNCA del campo `plan`.
+ *
+ * `plan` no sale de Convex a propósito (`SERVER_ONLY_PROFILE_FIELDS`): es una
+ * caché derivada de las suscripciones que puede ir por detrás de la realidad
+ * —una cuenta con el pase caducado conserva ahí su `pro`— y leerla es, en
+ * palabras del propio Pagatu, «la forma más fácil de autorizar por el sitio
+ * equivocado». Lo que el servidor publica ya resuelto es `effectiveAccess`,
+ * con el plan de facturación, el acceso efectivo y el nombre para mostrar.
+ *
+ * La primera versión de esto pedía `plan` y por eso la respuesta salía sin
+ * plan: no faltaba el dato, es que se estaba mirando donde no se debe.
+ */
 export function profileSummary(row: Row): Row {
+  const access = asRow(row.effectiveAccess)
   return compact({
     id: str(row, '_id'),
     name: str(row, 'name'),
     email: str(row, 'email'),
-    plan: str(row, 'plan'),
+    // Acceso EFECTIVO (lo que la cuenta puede hacer hoy), no la caché de plan.
+    plan: access ? str(access, 'accessPlan') : undefined,
+    planLabel: access ? str(access, 'displayName') : undefined,
+    billingPlan: access ? str(access, 'billingPlan') : undefined,
     country: str(row, 'countryCode') ?? str(row, 'country'),
     currency: str(row, 'defaultCurrency') ?? str(row, 'currency'),
     businessName: str(row, 'businessName'),
