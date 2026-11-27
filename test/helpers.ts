@@ -40,6 +40,10 @@ export interface FakeBackend {
   sessions?: Array<Record<string, unknown>>
   /** Respuesta del endpoint de token de plantilla. */
   templateToken?: { status?: number; body?: unknown }
+  /** Respuesta de `POST /v1/sign_in_tokens` (Backend API). */
+  signInToken?: { status?: number; body?: unknown }
+  /** Respuesta de `POST /v1/client/sign_ins` (Frontend API, canje del ticket). */
+  ticketSignIn?: { status?: number; body?: unknown }
   /** Resultados de Convex por ruta (`clients:listClients`). */
   convex?: Record<string, { value?: unknown; error?: string; errorData?: unknown }>
   calls: Array<{ url: string; body?: unknown }>
@@ -50,6 +54,11 @@ export function createFakeBackend(config: Partial<FakeBackend> = {}): FakeBacken
     verify: { status: 200, body: { subject: 'user_123', client_id: 'client_abc', scopes: ['profile', 'email'] } },
     sessions: [{ id: 'sess_1', last_active_at: Date.now() }],
     templateToken: { status: 200, body: { jwt: fakeJwt() } },
+    signInToken: { status: 200, body: { object: 'sign_in_token', id: 'sit_1', token: 'ticket_abc' } },
+    ticketSignIn: {
+      status: 200,
+      body: { response: { object: 'sign_in_attempt', status: 'complete', created_session_id: 'sess_creada' }, client: {} },
+    },
     convex: {},
     calls: [],
     ...config,
@@ -64,7 +73,16 @@ export function fakeFetch(backend: FakeBackend): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     const rawBody = typeof init?.body === 'string' ? init.body : undefined
-    const body = rawBody ? (JSON.parse(rawBody) as unknown) : undefined
+    // El canje del ticket va en formulario, no en JSON: parsear a ciegas rompía
+    // el doble antes de llegar a la ruta.
+    let body: unknown
+    if (rawBody) {
+      try {
+        body = JSON.parse(rawBody) as unknown
+      } catch {
+        body = Object.fromEntries(new URLSearchParams(rawBody))
+      }
+    }
     backend.calls.push({ url, ...(body !== undefined ? { body } : {}) })
 
     if (url.includes('/oauth_applications/access_tokens/verify')) {
@@ -74,6 +92,16 @@ export function fakeFetch(backend: FakeBackend): typeof fetch {
 
     if (url.includes('/v1/sessions?')) {
       return json({ data: backend.sessions ?? [] })
+    }
+
+    if (url.includes('/v1/sign_in_tokens')) {
+      const { status = 200, body: payload } = backend.signInToken ?? {}
+      return json(payload ?? {}, status)
+    }
+
+    if (url.includes('/v1/client/sign_ins')) {
+      const { status = 200, body: payload } = backend.ticketSignIn ?? {}
+      return json(payload ?? {}, status)
     }
 
     if (/\/v1\/sessions\/[^/]+\/tokens\//.test(url)) {

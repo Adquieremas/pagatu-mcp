@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveConfig } from '../src/env'
 import { createLogger } from '../src/logging'
-import { ClerkBackendClient, __clearAuthCaches, readJwtExpiry } from '../src/auth/clerk'
+import { ClerkBackendClient, __clearAuthCaches, findCreatedSessionId, readJwtExpiry } from '../src/auth/clerk'
 import { PagatuSessionRequiredError, UpstreamError } from '../src/errors'
 import { createFakeBackend, fakeFetch, fakeJwt, stubFetch, testEnv } from './helpers'
 
@@ -112,8 +112,36 @@ describe('mintConvexToken', () => {
     expect(tokenCall?.url).toContain('/v1/sessions/sess_nueva/tokens/convex')
   })
 
-  it('sin sesión activa pide iniciar sesión en Pagatu', async () => {
-    const { clerk } = client(createFakeBackend({ sessions: [] }))
+  // El fallo que hizo falta arreglar: quien autorizaba el conector y luego
+  // cerraba Pagatu se quedaba sin herramientas para siempre, porque desde un
+  // chat no hay forma de abrir un navegador.
+  it('sin sesión abierta, crea una con el ticket de Clerk en vez de rendirse', async () => {
+    const { clerk, backend } = client(createFakeBackend({ sessions: [] }))
+
+    const token = await clerk.mintConvexToken('user_123')
+
+    expect(token.jwt).toContain('.')
+    const ticket = backend.calls.find((call) => call.url.includes('/v1/sign_in_tokens'))
+    expect(ticket?.body).toMatchObject({ user_id: 'user_123' })
+    const canje = backend.calls.find((call) => call.url.includes('/v1/client/sign_ins'))
+    expect(canje?.url).toBe('https://clerk.pagatu.io/v1/client/sign_ins')
+    expect(canje?.body).toMatchObject({ strategy: 'ticket', ticket: 'ticket_abc' })
+    expect(backend.calls.some((call) => call.url.includes('/v1/sessions/sess_creada/tokens/convex'))).toBe(true)
+  })
+
+  it('con una sesión abierta no crea ninguna', async () => {
+    const { clerk, backend } = client()
+    await clerk.mintConvexToken('user_123')
+    expect(backend.calls.some((call) => call.url.includes('/v1/sign_in_tokens'))).toBe(false)
+  })
+
+  it('si Clerk no deja crear la sesión, pide iniciar sesión en Pagatu', async () => {
+    const { clerk } = client(createFakeBackend({ sessions: [], signInToken: { status: 403, body: {} } }))
+    await expect(clerk.mintConvexToken('user_123')).rejects.toBeInstanceOf(PagatuSessionRequiredError)
+  })
+
+  it('si el canje del ticket falla, pide iniciar sesión en Pagatu', async () => {
+    const { clerk } = client(createFakeBackend({ sessions: [], ticketSignIn: { status: 400, body: {} } }))
     await expect(clerk.mintConvexToken('user_123')).rejects.toBeInstanceOf(PagatuSessionRequiredError)
   })
 
@@ -162,5 +190,18 @@ describe('readJwtExpiry', () => {
   it('devuelve undefined ante basura', () => {
     expect(readJwtExpiry('no-es-un-jwt')).toBeUndefined()
     expect(readJwtExpiry('a.b.c')).toBeUndefined()
+  })
+})
+
+describe('findCreatedSessionId', () => {
+  it('lo encuentra esté donde esté en la respuesta envuelta', () => {
+    expect(findCreatedSessionId({ response: { created_session_id: 'sess_x' } })).toBe('sess_x')
+    expect(findCreatedSessionId({ client: { sign_in: { created_session_id: 'sess_y' } } })).toBe('sess_y')
+    expect(findCreatedSessionId({ data: [{ created_session_id: 'sess_z' }] })).toBe('sess_z')
+  })
+
+  it('devuelve undefined cuando la sesión no llegó a crearse', () => {
+    expect(findCreatedSessionId({ response: { status: 'needs_first_factor', created_session_id: null } })).toBeUndefined()
+    expect(findCreatedSessionId(null)).toBeUndefined()
   })
 })

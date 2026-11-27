@@ -8,12 +8,24 @@
  *    es. Ese endpoint es la única autoridad sobre si un token sirve: aquí no
  *    se valida ninguna firma a mano ni se confía en nada que venga del cliente.
  *
- * 2. FIRMA, para ese mismo usuario, un JWT del template `convex` a partir de
- *    su sesión activa de Clerk
+ * 2. FIRMA, para ese mismo usuario, un JWT del template `convex`
  *    (`POST /v1/sessions/{session_id}/tokens/{template}`). Es el mismo token
  *    que usa la app de Pagatu, así que Convex aplica al MCP las mismas reglas
  *    de identidad y de propiedad que al navegador. El Worker no tiene —ni
  *    necesita— una clave de administrador de Convex.
+ *
+ * Para firmar hace falta una SESIÓN de ese usuario. Al principio solo se
+ * buscaban las sesiones de navegador ya abiertas, y eso estaba mal: quien
+ * autorizaba el conector y luego cerraba Pagatu recibía «inicia sesión» en
+ * todas las herramientas, para siempre. Un cliente MCP no tiene navegador y no
+ * hay nada que el usuario pueda hacer desde el chat. Ahora, cuando no hay
+ * ninguna sesión abierta, el Worker crea una él mismo con el par
+ * `POST /v1/sign_in_tokens` (Backend API) + `strategy=ticket` contra la
+ * Frontend API, que es la vía que Clerk da para esto en producción
+ * (`POST /v1/sessions` crea sesiones, pero solo en instancias de desarrollo).
+ *
+ * Sigue siendo la identidad del usuario y nada más: el sign-in token se pide
+ * para su `user_id`, dura un minuto y no concede nada que él no tuviera.
  *
  * El secreto de Clerk no sale de aquí.
  */
@@ -96,6 +108,32 @@ async function isClerkTokenNotFound(response: Response): Promise<boolean> {
       typeof (item as { code?: unknown }).code === 'string' &&
       (item as { code: string }).code.includes('oauth_access_token'),
   )
+}
+
+/**
+ * Saca `created_session_id` de la respuesta de la Frontend API.
+ *
+ * Viene envuelta (`{ response: {...}, client: {...} }`) y el envoltorio ha
+ * cambiado de forma entre versiones de la API, así que se busca la clave donde
+ * esté en vez de dar por buena una ruta concreta.
+ */
+export function findCreatedSessionId(payload: unknown, depth = 0): string | undefined {
+  if (depth > 4 || typeof payload !== 'object' || payload === null) return undefined
+  const row = payload as Record<string, unknown>
+  const direct = row['created_session_id']
+  if (typeof direct === 'string' && direct.length > 0) return direct
+  for (const value of Object.values(row)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = findCreatedSessionId(item, depth + 1)
+        if (found) return found
+      }
+      continue
+    }
+    const found = findCreatedSessionId(value, depth + 1)
+    if (found) return found
+  }
+  return undefined
 }
 
 /** Lee el `exp` de un JWT SIN verificarlo: solo para decidir cuánto cachearlo. */
@@ -206,52 +244,125 @@ export class ClerkBackendClient {
   /**
    * Firma un JWT del template de Convex para el usuario dado.
    *
-   * Necesita una sesión activa de Clerk de ese usuario, que es lo mismo que
-   * necesita la app. Si no hay ninguna (nadie abrió Pagatu en días), lanza
-   * `PagatuSessionRequiredError` con la instrucción concreta: iniciar sesión.
+   * Primero intenta con las sesiones que el usuario ya tenga abiertas: si está
+   * trabajando en Pagatu, no se crea nada. Si no hay ninguna, crea una sesión
+   * para él (ver la cabecera del módulo) en vez de pedirle que abra el
+   * navegador, porque desde un chat no puede hacerlo.
+   *
+   * `PagatuSessionRequiredError` queda para el caso que de verdad lo merece:
+   * Clerk no deja crear la sesión, casi siempre porque la cuenta ya no está
+   * activa.
    */
   async mintConvexToken(userId: string): Promise<ConvexSessionToken> {
     const cached = convexTokenCache.get(userId)
     if (cached) return cached
 
-    const sessions = await this.listActiveSessions(userId)
-    if (sessions.length === 0) {
-      this.logger.info('clerk.session.none', { user: shortUserId(userId) })
-      throw new PagatuSessionRequiredError(this.config.appUrl)
-    }
-
-    let lastStatus = 0
-    for (const sessionId of sessions) {
-      const response = await this.request(
-        `/v1/sessions/${encodeURIComponent(sessionId)}/tokens/${encodeURIComponent(this.config.convexJwtTemplate)}`,
-        { method: 'POST', body: JSON.stringify({}) },
-      )
-      if (!response.ok) {
-        lastStatus = response.status
-        this.logger.debug('clerk.template_token.rejected', { status: response.status })
-        continue
-      }
-      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
-      const jwt = payload ? pickString(payload, ['jwt', 'token']) : undefined
-      if (!jwt) {
-        lastStatus = 500
-        continue
-      }
-      const expiresAt = readJwtExpiry(jwt) ?? Date.now() + DEFAULT_TEMPLATE_TOKEN_TTL_MS
-      const token: ConvexSessionToken = { jwt, expiresAt }
-      convexTokenCache.set(userId, token, Math.max(0, expiresAt - Date.now() - TOKEN_SKEW_MS))
-      return token
-    }
-
-    this.logger.warn('clerk.template_token.failed', { user: shortUserId(userId), status: lastStatus })
-    // 404 del endpoint de plantilla = la plantilla no existe en esa instancia.
-    if (lastStatus === 404) {
+    const existing = await this.listActiveSessions(userId)
+    const attempt = await this.signWithAnySession(userId, existing)
+    if (attempt.token) return attempt.token
+    if (attempt.templateMissing) {
       throw new UpstreamError(
         'clerk',
         `Clerk no tiene el JWT template «${this.config.convexJwtTemplate}». Créalo en el dashboard de Clerk para que el MCP pueda hablar con Convex.`,
       )
     }
+
+    // Ninguna sesión abierta servía. Se crea una.
+    const created = await this.createSessionForUser(userId)
+    if (!created) {
+      this.logger.info('clerk.session.none', { user: shortUserId(userId) })
+      throw new PagatuSessionRequiredError(this.config.appUrl)
+    }
+
+    const second = await this.signWithAnySession(userId, [created])
+    if (second.token) return second.token
+    if (second.templateMissing) {
+      throw new UpstreamError(
+        'clerk',
+        `Clerk no tiene el JWT template «${this.config.convexJwtTemplate}». Créalo en el dashboard de Clerk para que el MCP pueda hablar con Convex.`,
+      )
+    }
+
+    this.logger.warn('clerk.template_token.failed', { user: shortUserId(userId) })
     throw new PagatuSessionRequiredError(this.config.appUrl)
+  }
+
+  /** Prueba a firmar el template con cada sesión hasta que una funcione. */
+  private async signWithAnySession(
+    userId: string,
+    sessionIds: string[],
+  ): Promise<{ token?: ConvexSessionToken; templateMissing: boolean }> {
+    let templateMissing = false
+    for (const sessionId of sessionIds) {
+      const response = await this.request(
+        `/v1/sessions/${encodeURIComponent(sessionId)}/tokens/${encodeURIComponent(this.config.convexJwtTemplate)}`,
+        { method: 'POST', body: JSON.stringify({}) },
+      )
+      if (!response.ok) {
+        // 404 aquí = la plantilla no existe en esta instancia de Clerk. No es
+        // un problema de sesión y reintentar con otra no arregla nada.
+        if (response.status === 404) templateMissing = true
+        this.logger.debug('clerk.template_token.rejected', { status: response.status })
+        continue
+      }
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+      const jwt = payload ? pickString(payload, ['jwt', 'token']) : undefined
+      if (!jwt) continue
+      const expiresAt = readJwtExpiry(jwt) ?? Date.now() + DEFAULT_TEMPLATE_TOKEN_TTL_MS
+      const token: ConvexSessionToken = { jwt, expiresAt }
+      convexTokenCache.set(userId, token, Math.max(0, expiresAt - Date.now() - TOKEN_SKEW_MS))
+      return { token, templateMissing: false }
+    }
+    return { templateMissing }
+  }
+
+  /**
+   * Crea una sesión de Clerk para el usuario, sin navegador.
+   *
+   * Dos pasos, los dos de Clerk:
+   *   1. Backend API: `POST /v1/sign_in_tokens` con el `user_id`. Devuelve un
+   *      ticket de un solo uso. Se pide con un minuto de vida: solo tiene que
+   *      sobrevivir a la llamada siguiente.
+   *   2. Frontend API (el propio issuer, p. ej. https://clerk.pagatu.io):
+   *      `POST /v1/client/sign_ins` con `strategy=ticket`, formulario, no JSON.
+   *      La respuesta trae `created_session_id`.
+   *
+   * Devuelve `null` —y no lanza— cuando Clerk se niega: quien llama decide qué
+   * decirle al usuario. Un fallo aquí no debe parecer una caída del servidor.
+   */
+  private async createSessionForUser(userId: string): Promise<string | null> {
+    const ticketResponse = await this.request('/v1/sign_in_tokens', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, expires_in_seconds: 60 }),
+    })
+    if (!ticketResponse.ok) {
+      this.logger.warn('clerk.sign_in_token.failed', { user: shortUserId(userId), status: ticketResponse.status })
+      return null
+    }
+    const ticketPayload = (await ticketResponse.json().catch(() => null)) as Record<string, unknown> | null
+    const ticket = ticketPayload ? pickString(ticketPayload, ['token']) : undefined
+    if (!ticket) {
+      this.logger.warn('clerk.sign_in_token.no_token', { user: shortUserId(userId) })
+      return null
+    }
+
+    const signInResponse = await this.fetchImpl(`${this.config.clerkIssuer}/v1/client/sign_ins`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ strategy: 'ticket', ticket }).toString(),
+    })
+    if (!signInResponse.ok) {
+      this.logger.warn('clerk.ticket_sign_in.failed', { user: shortUserId(userId), status: signInResponse.status })
+      return null
+    }
+    const payload = (await signInResponse.json().catch(() => null)) as Record<string, unknown> | null
+    const sessionId = findCreatedSessionId(payload)
+    if (!sessionId) {
+      this.logger.warn('clerk.ticket_sign_in.no_session', { user: shortUserId(userId) })
+      return null
+    }
+    this.logger.info('clerk.session.created', { user: shortUserId(userId) })
+    return sessionId
   }
 
   /** Ids de sesiones activas del usuario, de la más reciente a la más antigua. */

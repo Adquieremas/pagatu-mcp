@@ -359,8 +359,21 @@ describe('herramientas contra Convex', () => {
     expect(toolText(result)).toMatchObject({ error: { code: 'plan_limit_clients' } })
   })
 
-  it('sin sesión de Clerk, la herramienta pide iniciar sesión en Pagatu', async () => {
+  it('sin sesión de navegador abierta, la herramienta responde igual', async () => {
+    // Antes esto devolvía «inicia sesión» y dejaba el conector inservible en
+    // cuanto el usuario cerraba Pagatu. Ahora el Worker crea la sesión.
     const backend = createFakeBackend({ sessions: [], convex: { 'clients:listClients': { value: [] } } })
+    const result = await call(toolPayload('pagatu_list_clients'), backend)
+    expect(result.result?.isError).toBeFalsy()
+    expect(toolText(result)).toMatchObject({ total: 0 })
+  })
+
+  it('si Clerk no deja crear la sesión, la herramienta pide iniciar sesión en Pagatu', async () => {
+    const backend = createFakeBackend({
+      sessions: [],
+      signInToken: { status: 403, body: {} },
+      convex: { 'clients:listClients': { value: [] } },
+    })
     const result = await call(toolPayload('pagatu_list_clients'), backend)
     expect(result.result?.isError).toBe(true)
     const payload = toolText(result) as { error: { code: string; message: string } }
