@@ -75,5 +75,9 @@ OAuth applications → Scopes → *Allowed scopes for dynamic clients* → añad
 - Esperar la revisión. No hay plazo fijo. Si piden cambios, se sube una versión
   nueva del ZIP y se vuelve a enviar.
 - Cuando termine: cambiar la contraseña de la cuenta de demostración.
-- El método de cobro de la cuenta de demostración está sin configurar; si un
-  revisor prueba `pagatu_list_payment_methods` verá una lista vacía.
+- **Mirar el método de cobro de la cuenta de demostración.** Tiene uno activo
+  —una cuenta BCP a nombre de «dilmer»—, así que `pagatu_list_payment_methods`
+  responde con contenido y la escena del vídeo funciona. Pero el revisor tiene
+  la contraseña de esa cuenta: por el MCP no verá el número (se devuelve sin
+  cuenta, CCI, IBAN ni alias), y dentro de Pagatu sí. Si esa cuenta es real,
+  conviene sustituirla por una de prueba mientras dure la revisión.
