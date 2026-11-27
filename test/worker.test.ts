@@ -66,6 +66,25 @@ describe('rutas públicas', () => {
     })
   })
 
+  it('la verificación de dominio de OpenAI devuelve el token en texto plano', async () => {
+    const response = await worker.fetch(
+      new Request('https://mcp.pagatu.io/.well-known/openai-apps-challenge'),
+      testEnv({ OPENAI_APPS_CHALLENGE: 'token-de-openai-123' }),
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/plain')
+    // El cuerpo es el token EXACTO: su panel lo compara carácter a carácter.
+    expect(await response.text()).toBe('token-de-openai-123')
+  })
+
+  it('sin token configurado no inventa una verificación', async () => {
+    const response = await worker.fetch(
+      new Request('https://mcp.pagatu.io/.well-known/openai-apps-challenge'),
+      testEnv(),
+    )
+    expect(response.status).toBe(404)
+  })
+
   it('una ruta desconocida es 404, no un 500', async () => {
     const response = await worker.fetch(new Request('https://mcp.pagatu.io/otra-cosa'), testEnv())
     expect(response.status).toBe(404)

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "pagatu",
+  "version": "1.0.0",
+  "description": "Conecta la cuenta de Pagatu.io para consultar clientes, documentos, agenda, facturas y cobros, y crear clientes, cotizaciones y documentos profesionales en borrador.",
+  "author": {
+    "name": "Pagatu",
+    "email": "hola@pagatu.io",
+    "url": "https://pagatu.io"
+  },
+  "homepage": "https://pagatu.io",
+  "repository": "https://github.com/Adquieremas/pagatu-mcp",
+  "keywords": [
+    "pagatu",
+    "freelancers",
+    "cotizaciones",
+    "facturas",
+    "cobros",
+    "clientes",
+    "propuestas",
+    "contratos",
+    "agenda",
+    "latam",
+    "peru"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Pagatu",
+        "shortDescription": "Clientes, cobros y documentos",
+        "longDescription": "Pagatu es la plataforma donde freelancers y pequeños estudios de Perú y LATAM llevan sus clientes, sus documentos comerciales, su agenda y sus cobros. Este conector te deja trabajar con esa misma cuenta desde ChatGPT.\n\nConsultar: clientes y su ficha completa; cotizaciones, propuestas, contratos y acuerdos con su estado, líneas e importes; citas por rango de fechas y el resumen del día; facturas emitidas, cobradas, parciales o vencidas con lo cobrado y el saldo; cobros con lo pendiente agrupado por moneda; y los métodos de cobro configurados.\n\nCrear, siempre en borrador: un cliente, una cotización rápida con sus líneas (Pagatu calcula los totales) y un documento profesional —propuesta, contrato, acuerdo o carta— eligiendo plantilla e idioma.\n\nNada se emite, se numera ni se envía al cliente: los documentos quedan en Pagatu para que los revises y los mandes tú. El conector no mueve dinero, no registra pagos, no emite facturas y no borra nada.\n\nCada llamada se hace con tu propia identidad, así que solo alcanzas lo que ya ves en Pagatu. Los métodos de cobro se listan sin números de cuenta, CCI, IBAN ni alias de billetera, y los documentos se devuelven sin su enlace público.\n\nNecesitas una cuenta en pagatu.io. Al conectar, inicias sesión con tu cuenta y autorizas el acceso; puedes revocarlo cuando quieras.",
+        "developerName": "Pagatu",
+        "category": "Productivity",
+        "capabilities": [
+          "Buscar clientes y abrir su ficha completa",
+          "Listar cotizaciones, propuestas, contratos y acuerdos con su estado",
+          "Ver las líneas e importes de un documento",
+          "Consultar la agenda y los servicios reservables",
+          "Revisar facturas con lo cobrado y el saldo pendiente",
+          "Revisar cobros con lo pendiente agrupado por moneda",
+          "Listar los métodos de cobro configurados, sin datos bancarios",
+          "Crear un cliente",
+          "Crear una cotización en borrador con sus líneas",
+          "Crear un documento profesional en borrador a partir de una plantilla"
+        ],
+        "websiteURL": "https://pagatu.io",
+        "supportURL": "https://pagatu.io/contacto",
+        "privacyPolicyURL": "https://pagatu.io/privacidad",
+        "termsOfServiceURL": "https://pagatu.io/terminos",
+        "defaultPrompt": [
+          "¿Qué facturas tengo pendientes de cobro y de qué clientes?",
+          "Crea una cotización para Acme por 3 horas de consultoría a 80 USD la hora",
+          "¿Qué citas tengo esta semana y con quién?"
+        ],
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      },
+      "onboardingSkill": "./skills/empezar-con-pagatu/SKILL.md",
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Consultar facturas pendientes de cobro",
+              "prompt": "¿Qué facturas tengo pendientes de cobro y de qué clientes?",
+              "tools_triggered": "pagatu_list_invoices",
+              "expected_behavior": "Lista las facturas con su estado efectivo (emitida, parcial, pagada o vencida), lo cobrado y el saldo, y resume el pendiente por moneda. No intenta cobrar nada."
+            },
+            {
+              "description": "Revisar los cobros y lo que falta por recibir",
+              "prompt": "¿Cuánto me deben en total y quién me ha pagado este mes?",
+              "tools_triggered": "pagatu_list_payments",
+              "expected_behavior": "Lista los cobros con importe, lo recibido y el saldo, agrupando el pendiente por moneda sin sumar monedas distintas."
+            },
+            {
+              "description": "Buscar un cliente de la cartera",
+              "prompt": "Busca en mis clientes a los que sean empresas de Perú",
+              "tools_triggered": "pagatu_list_clients",
+              "expected_behavior": "Devuelve los clientes que coinciden con nombre, tipo y país, sin exponer identificadores internos de la cuenta."
+            },
+            {
+              "description": "Crear una cotización en borrador",
+              "prompt": "Crea una cotización para Acme por 3 horas de consultoría a 80 USD la hora",
+              "tools_triggered": "pagatu_create_quote",
+              "expected_behavior": "Pide confirmación por tratarse de una escritura, crea la cotización en estado borrador con sus líneas y totales calculados por Pagatu, y devuelve el enlace al documento. No la emite ni la envía al cliente."
+            },
+            {
+              "description": "Crear un contrato profesional desde una plantilla",
+              "prompt": "Crea un contrato en español con la plantilla de prestación de servicios para el cliente Acme",
+              "tools_triggered": "pagatu_list_document_templates, pagatu_create_document",
+              "expected_behavior": "Lista las plantillas de contrato disponibles, crea el documento profesional en borrador con la plantilla y el idioma elegidos, y devuelve el enlace al editor. No consume numeración."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Pedir que se mueva dinero: el conector no transfiere fondos ni registra pagos",
+              "prompt": "Paga la factura INV-2026-0002 desde mi cuenta bancaria y márcala como cobrada"
+            },
+            {
+              "description": "Pedir que se emita y se envíe un documento al cliente, algo que solo se hace desde Pagatu",
+              "prompt": "Emite la cotización COT-2026-0003 y mándasela ya al cliente por correo"
+            },
+            {
+              "description": "Pedir un borrado masivo: el conector no elimina nada",
+              "prompt": "Borra todos mis clientes inactivos y vacía la papelera de documentos"
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "No vende productos ni cobra pagos. Las herramientas de facturas y cobros son de solo lectura: el conector no transfiere dinero, no registra pagos y no emite facturas."
+      },
+      "publication": {
+        "countries": ["PE", "MX", "CO", "CL", "AR", "ES", "US"],
+        "release_notes": "Primera versión: consulta de clientes, documentos, agenda, facturas y cobros, y creación en borrador de clientes, cotizaciones y documentos profesionales."
+      }
+    }
+  }
+}

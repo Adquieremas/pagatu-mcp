@@ -27,6 +27,15 @@ export interface Env {
   PAGATU_MCP_ALLOWED_CLIENT_IDS?: string
   /** `debug` | `info` | `warn` | `error`. Por defecto `info`. */
   PAGATU_MCP_LOG_LEVEL?: string
+  /**
+   * Token de verificación de dominio del directorio de apps de OpenAI.
+   *
+   * OpenAI comprueba que el dominio es tuyo pidiendo
+   * `/.well-known/openai-apps-challenge` y comparando el cuerpo con el token
+   * que te da su panel. Mientras esté vacío, esa ruta devuelve 404: así el
+   * servidor no publica un archivo de verificación falso.
+   */
+  OPENAI_APPS_CHALLENGE?: string
 }
 
 export interface Config {

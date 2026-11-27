@@ -48,6 +48,23 @@ export default {
       return jsonResponse({ ok: true, service: SERVER_NAME, version: SERVER_VERSION })
     }
 
+    // Verificación de dominio de OpenAI. Antes de resolver la configuración,
+    // igual que /health: es una comprobación de propiedad del dominio, no
+    // necesita Clerk ni Convex. Devuelve el token EXACTO, sin envolver en
+    // JSON, porque eso es lo que compara su panel.
+    if (url.pathname === '/.well-known/openai-apps-challenge') {
+      const challenge = env.OPENAI_APPS_CHALLENGE?.trim()
+      if (!challenge) {
+        return jsonResponse(
+          { error: 'not_configured', message: 'Falta OPENAI_APPS_CHALLENGE en el Worker.' },
+          404,
+        )
+      }
+      return withCors(
+        new Response(challenge, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }),
+      )
+    }
+
     let config
     try {
       config = resolveConfig(env)
