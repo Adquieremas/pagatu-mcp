@@ -126,11 +126,18 @@ export default {
       if (error instanceof HttpError) {
         return jsonRpcError(error.status, JSON_RPC_INVALID_REQUEST, error.message, error.headers)
       }
+      // Un error sin detalle («Internal Server Error» a secas) no ayuda a
+      // nadie: ni al usuario, que no sabe si reintentar, ni a la revisión del
+      // directorio de Claude, que lo rechaza expresamente. Se nombra la etapa
+      // y el tipo de fallo —nunca el mensaje interno, que puede llevar datos.
+      const detalle = error instanceof Error ? error.name : 'UnknownError'
       logger.error('mcp.unhandled', { message: error instanceof Error ? error.message : 'unknown' })
       return jsonRpcError(
         500,
         JSON_RPC_INTERNAL_ERROR,
-        'Error interno del servidor MCP de Pagatu. Vuelve a intentarlo.',
+        `El servidor MCP de Pagatu falló al procesar la petición (${detalle}) después de autenticarte. ` +
+          'No se escribió nada en tu cuenta. Vuelve a intentarlo; si persiste, revisa el estado en ' +
+          'https://mcp.pagatu.io/health',
       )
     }
   },

@@ -132,6 +132,24 @@ describe('protocolo MCP', () => {
     expect(names).toContain('pagatu_list_document_templates')
   })
 
+  it('cada herramienta anuncia title y la anotación que exige el directorio', async () => {
+    const result = await call({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, createFakeBackend())
+    const tools = result.result?.tools as Array<{ name: string; annotations?: Record<string, unknown> }>
+    expect(tools.length).toBeGreaterThan(0)
+    for (const tool of tools) {
+      expect(tool.annotations?.title, tool.name).toBeTruthy()
+      // Lee o modifica: una de las dos, nunca las dos en false.
+      const readOnly = tool.annotations?.readOnlyHint === true
+      const destructive = tool.annotations?.destructiveHint === true
+      expect(readOnly || destructive, `${tool.name} sin readOnlyHint ni destructiveHint`).toBe(true)
+      expect(readOnly && destructive, `${tool.name} con las dos anotaciones`).toBe(false)
+      expect(tool.name.length, tool.name).toBeLessThanOrEqual(64)
+    }
+    // Las tres que escriben van marcadas como destructivas.
+    const destructivas = tools.filter((tool) => tool.annotations?.destructiveHint === true).map((tool) => tool.name)
+    expect(destructivas.sort()).toEqual(['pagatu_create_client', 'pagatu_create_document', 'pagatu_create_quote'])
+  })
+
   it('en modo solo lectura las herramientas de escritura NI SE ANUNCIAN', async () => {
     stubFetch(createFakeBackend())
     const response = await worker.fetch(

@@ -90,10 +90,21 @@ export function defineTool<Shape extends ZodRawShapeCompat>(
       title: definition.title,
       description: definition.description,
       ...(definition.inputSchema ? { inputSchema: definition.inputSchema } : {}),
+      // ANOTACIONES. El directorio de conectores de Claude exige que cada
+      // herramienta lleve `title` y, según lo que haga, `readOnlyHint: true`
+      // (solo lee) o `destructiveHint: true` (modifica o borra datos); una
+      // herramienta de escritura con los dos en `false` no pasa la revisión.
+      //
+      // Matiz que conviene no perder: en la especificación MCP
+      // «destructive» significa «puede sobrescribir o destruir», y crear un
+      // borrador no destruye nada. Aquí se marca igualmente porque el
+      // criterio del directorio es «modifica datos» y porque el efecto
+      // práctico es el que queremos: el cliente pide confirmación antes de
+      // escribir en la cuenta de alguien.
       annotations: {
         title: definition.title,
-        readOnlyHint: definition.readOnly ?? definition.permission === 'read',
-        destructiveHint: false,
+        readOnlyHint: definition.permission === 'read',
+        destructiveHint: definition.permission === 'write',
         idempotentHint: definition.idempotent ?? definition.permission === 'read',
         openWorldHint: true,
       },

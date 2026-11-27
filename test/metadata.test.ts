@@ -12,6 +12,9 @@ describe('metadatos OAuth', () => {
       resource: 'https://mcp.pagatu.io/mcp',
       authorization_servers: ['https://clerk.pagatu.io'],
       bearer_methods_supported: ['header'],
+      // offline_access anunciado: sin él el cliente no pide refresh token y
+      // la conexión caduca con el access token.
+      scopes_supported: ['profile', 'email', 'offline_access'],
     })
   })
 

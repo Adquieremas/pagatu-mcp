@@ -39,7 +39,11 @@ export function protectedResourceMetadata(config: Config): Record<string, unknow
     // Los scopes que pide un cliente MCP a Clerk. `profile` y `email`
     // identifican al usuario; Pagatu no necesita más para decidir permisos,
     // porque la autorización real la hace Convex con la identidad del dueño.
-    scopes_supported: ['profile', 'email'],
+    //
+    // `offline_access` va en la lista para que el cliente pida refresh token:
+    // sin él, la conexión caduca con el access token y el usuario tiene que
+    // volver a autorizar. Claude solo lo solicita si está anunciado aquí.
+    scopes_supported: ['profile', 'email', 'offline_access'],
     resource_name: 'Pagatu MCP',
     resource_documentation: 'https://github.com/Adquieremas/pagatu-mcp',
   }
