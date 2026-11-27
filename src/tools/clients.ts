@@ -6,6 +6,14 @@
  * se aplican AQUÍ, sobre lo que ya devolvió Convex: es un recorte de la
  * respuesta, no un endpoint nuevo. Se dice en la descripción de la herramienta
  * para que el modelo sepa que `search` no es una búsqueda del servidor.
+ *
+ * Sobre `documentType` / `documentNumber`: en Pagatu son la identificación
+ * TRIBUTARIA que se imprime en la factura (RUC, NIT, CUIT, RFC), no un
+ * documento de identidad. Llamarlos «documento (DNI, RUC…)» hizo que el
+ * escáner del directorio de apps de OpenAI marcara estas dos herramientas como
+ * bloqueantes —«solicita un identificador emitido por el gobierno»— porque leía
+ * «DNI» y «documento» sin más contexto. Los campos no cambiaron; sí su
+ * descripción, que ahora dice lo que de verdad se pide.
  */
 
 import { z } from 'zod'
@@ -37,7 +45,7 @@ export function registerClientTools(server: McpServer, context: ToolContext): vo
         '`search` y `limit` filtran el resultado ya devuelto por Pagatu, no hacen una búsqueda en el servidor.',
       permission: 'read',
       inputSchema: {
-        search: z.string().trim().min(1).max(120).optional().describe('Texto a buscar en nombre, razón social, email, teléfono o documento.'),
+        search: z.string().trim().min(1).max(120).optional().describe('Texto a buscar en nombre, razón social, email, teléfono o identificación tributaria.'),
         limit: z.number().int().min(1).max(300).optional().describe('Máximo de clientes a devolver (por defecto 50).'),
       },
     },
@@ -83,7 +91,7 @@ export function registerClientTools(server: McpServer, context: ToolContext): vo
       name: 'pagatu_create_client',
       title: 'Crear cliente',
       description:
-        'Crea un cliente en tu cuenta de Pagatu. Pagatu rechaza duplicados por documento, email o teléfono; ' +
+        'Crea un cliente en tu cuenta de Pagatu. Pagatu rechaza duplicados por identificación tributaria, email o teléfono; ' +
         'usa `allowDuplicate` solo si de verdad quieres otra ficha con el mismo dato.',
       permission: 'write',
       idempotent: false,
@@ -93,8 +101,14 @@ export function registerClientTools(server: McpServer, context: ToolContext): vo
         email: z.string().trim().email().max(254).optional(),
         phone: z.string().trim().min(3).max(40).optional(),
         whatsapp: z.string().trim().min(3).max(40).optional(),
-        documentType: z.string().trim().min(1).max(24).optional().describe('Tipo de documento (DNI, RUC, NIT, CUIT…).'),
-        documentNumber: z.string().trim().min(1).max(32).optional(),
+        documentType: z.string().trim().min(1).max(24).optional().describe('Tipo de identificación tributaria de facturación que ya usa el cliente (RUC, NIT, CUIT, RFC…). No pidas documentos de identidad personales.'),
+        documentNumber: z
+          .string()
+          .trim()
+          .min(1)
+          .max(32)
+          .optional()
+          .describe('Número de esa identificación tributaria, tal como debe salir impreso en las facturas.'),
         businessName: z.string().trim().min(1).max(180).optional(),
         countryCode: z.string().trim().length(2).optional().describe('ISO 3166-1 alfa-2, p. ej. PE.'),
         city: z.string().trim().min(1).max(120).optional(),

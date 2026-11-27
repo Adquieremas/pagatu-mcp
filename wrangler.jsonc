@@ -40,7 +40,11 @@
     "PAGATU_MCP_PUBLIC_URL": "https://mcp.pagatu.io",
     "PAGATU_APP_URL": "https://app.pagatu.io",
     "PAGATU_MCP_WRITE_ENABLED": "true",
-    "PAGATU_MCP_LOG_LEVEL": "info"
+    "PAGATU_MCP_LOG_LEVEL": "info",
+    // Verificación de dominio del directorio de apps de OpenAI. No es un
+    // secreto: el Worker lo sirve públicamente en
+    // /.well-known/openai-apps-challenge, que es justo lo que OpenAI compara.
+    "OPENAI_APPS_CHALLENGE": "km_69yPFypll6IYLcweZxxOa5ENTyc2VKd2J-PX7aSU"
   },
   "routes": [
     {
